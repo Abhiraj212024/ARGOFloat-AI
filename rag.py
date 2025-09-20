@@ -6,7 +6,7 @@ os.environ['LANGCHAIN_ENDPOINT'] = 'https://api.smith.langchain.com'
 LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
 
 import duckdb
-from langchain_community.llms import Ollama
+from langchain_ollama import OllamaLLM
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
@@ -14,22 +14,32 @@ from langchain_core.output_parsers import StrOutputParser
 # ----------------------------
 # 1. Setup LLaMA 3
 # ----------------------------
-llm = Ollama(model="llama3:8b-instruct-q4_K_M")
+llm = OllamaLLM(model="llama3:8b-instruct-q4_K_M")
 
 # ----------------------------
 # 2. Hardcode or Introspect Schema
 # ----------------------------
-DB_PATH = "argo.db"
+DB_PATH = "./DB_files/data.duckdb"
+TABLE_NAME = "ocean_profiles"
 
-def get_schema_text(db_path: str) -> str:
+def get_schema_text(db_path: str, table_name: str) -> str:
     con = duckdb.connect(db_path)
-    columns = con.execute("DESCRIBE argo;").fetchdf()
-    schema_text = "Table: argo\n"
+    columns = con.execute(f"DESCRIBE {table_name};").fetchdf()
+    schema_text = f"Table: {table_name}\n"
     for row in columns.itertuples():
         schema_text += f"  - {row.column_name} ({row.column_type})\n"
     return schema_text
 
-SCHEMA_TEXT = get_schema_text(DB_PATH)
+SCHEMA_TEXT = get_schema_text(DB_PATH, TABLE_NAME)
+
+#-----------------------------
+# Clean SQL Function
+#----------------------------
+
+def clean_sql(sql: str) -> str:
+    sql = sql.replace("```sql", "").replace("```", "").strip()
+    return sql
+
 
 # ----------------------------
 # 3. SQL Generation Function
@@ -53,9 +63,10 @@ def generate_sql(user_query: str) -> str:
     ])
     
     
-    chain = prompt | llm | StrOutputParser
+    chain = prompt | llm | StrOutputParser()
     sql_query = chain.invoke({"question": user_query})
-    return sql_query.strip()
+    return clean_sql(sql_query)
+
 
 # ----------------------------
 # 4. Execute SQL
