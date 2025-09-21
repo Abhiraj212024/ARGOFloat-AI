@@ -52,11 +52,10 @@ def generate_sql(user_query: str) -> str:
         ("human", "{question}")
     ])
     
-    def query_lambda(question: str) -> str:
-        return (prompt | llm).invoke({"question": question})
     
-    chain = RunnableLambda(query_lambda) | StrOutputParser
-    return chain.invoke(user_query)
+    chain = prompt | llm | StrOutputParser
+    sql_query = chain.invoke({"question": user_query})
+    return sql_query.strip()
 
 # ----------------------------
 # 4. Execute SQL
