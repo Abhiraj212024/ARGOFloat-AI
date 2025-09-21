@@ -123,3 +123,7 @@ if prompt := st.chat_input("What do you want to see?"):
             st.session_state.unhandled_queries.append(prompt) 
 st.sidebar.subheader("Unhandled Queries")
 st.sidebar.write(st.session_state.unhandled_queries)
+#to be sent to LLM
+unhandled_query=st.session_state.unhandled_queries
+st.write(unhandled_query)
+print(unhandled_query)
