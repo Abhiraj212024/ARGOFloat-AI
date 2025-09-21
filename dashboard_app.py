@@ -23,8 +23,45 @@ st.set_page_config(layout="wide", page_title="FloatChat Dashboard")
 # ----------------------------
 # Visualization Functions
 # ----------------------------
+# def show_map(df):
+    # """Create geographic map visualization of float locations."""
+    # if df.empty:
+    #     st.error("No data available for map visualization")
+    #     return None
+    
+    # required_cols = ["lat", "lon"]
+    # missing_cols = [col for col in required_cols if col not in df.columns]
+    
+    # if missing_cols:
+    #     st.error(f"Map requires columns: {', '.join(missing_cols)}")
+    #     return None
+    
+    # try:
+    #     # Create the map
+    #     fig = px.scatter_geo(
+    #         df, 
+    #         lat="lat", 
+    #         lon="lon", 
+    #         color="temperature" if "temperature" in df.columns else None,
+    #         hover_name="float_id" if "float_id" in df.columns else None,
+    #         hover_data={col: True for col in df.columns if col not in ["lat", "lon"]},
+    #         size_max=15,
+    #         projection="natural earth",
+    #         title="ARGO Floats Geographic Distribution"
+    #     )
+    #     fig.update_layout(
+    #         height=600,
+    #         showlegend=True
+    #     )
+        
+    #     return fig
+        
+    # except Exception as e:
+    #     st.error(f"Error creating map: {str(e)}")
+    #     return None
+# import plotly.express as px
+
 def show_map(df):
-    """Create geographic map visualization of float locations."""
     if df.empty:
         st.error("No data available for map visualization")
         return None
@@ -37,91 +74,52 @@ def show_map(df):
         return None
     
     try:
-        # Create the map
-        fig = px.scatter_geo(
-            df, 
-            lat="lat", 
-            lon="lon", 
+        fig = px.scatter_mapbox(
+            df,
+            lat="lat",
+            lon="lon",
             color="temperature" if "temperature" in df.columns else None,
             hover_name="float_id" if "float_id" in df.columns else None,
             hover_data={col: True for col in df.columns if col not in ["lat", "lon"]},
             size_max=15,
-            projection="natural earth",
-            title="ARGO Floats Geographic Distribution"
+            zoom=1,
+            mapbox_style="carto-darkmatter"  # 🌑 Dark background
         )
-        
-        fig.update_layout(
-            height=600,
-            showlegend=True
-        )
-        
+        fig.update_layout(height=600, showlegend=True)
         return fig
-        
     except Exception as e:
         st.error(f"Error creating map: {str(e)}")
         return None
-
+    
 def show_profile(df):
-    """Create depth profile visualization for temperature and salinity."""
-    if df.empty:
-        st.error("No data available for profile visualization")
+    def show_map(df):
+        if df.empty:
+            st.error("No data available for map visualization")
         return None
     
-    required_cols = ["temperature", "salinity", "depth"]
+    required_cols = ["lat", "lon"]
     missing_cols = [col for col in required_cols if col not in df.columns]
     
     if missing_cols:
-        st.error(f"Profile plot requires columns: {', '.join(missing_cols)}")
+        st.error(f"Map requires columns: {', '.join(missing_cols)}")
         return None
     
     try:
-        fig = make_subplots(
-            rows=1, cols=2, 
-            shared_yaxes=True,
-            subplot_titles=("Temperature (°C)", "Salinity (PSU)"),
-            horizontal_spacing=0.1
+        fig = px.scatter_mapbox(
+            df,
+            lat="lat",
+            lon="lon",
+            color="temperature" if "temperature" in df.columns else None,
+            hover_name="float_id" if "float_id" in df.columns else None,
+            hover_data={col: True for col in df.columns if col not in ["lat", "lon"]},
+            size_max=15,
+            zoom=1,
+            mapbox_style="carto-darkmatter"  # 🌑 Dark background
         )
-
-        # Temperature profile
-        fig.add_trace(
-            go.Scatter(
-                x=df["temperature"], 
-                y=df["depth"], 
-                mode="lines+markers",
-                name="Temperature",
-                line=dict(color="red", width=2),
-                marker=dict(size=6)
-            ), 
-            col=1, row=1
-        )
-        
-        # Salinity profile
-        fig.add_trace(
-            go.Scatter(
-                x=df["salinity"], 
-                y=df["depth"], 
-                mode="lines+markers",
-                name="Salinity",
-                line=dict(color="blue", width=2),
-                marker=dict(size=6)
-            ), 
-            col=2, row=1
-        )
-
-        # Update layout
-        fig.update_yaxes(autorange="reversed", title="Depth (m)")
-        fig.update_xaxes(title="Temperature (°C)", col=1)
-        fig.update_xaxes(title="Salinity (PSU)", col=2)
-        fig.update_layout(
-            height=600,
-            title="Oceanographic Profiles vs Depth",
-            showlegend=False
-        )
-        
+        fig.update_layout(height=600, showlegend=True)
         return fig
-        
     except Exception as e:
-        st.error(f"Error creating profile plot: {str(e)}")
+        st.error(f"Error creating map: {str(e)}")
         return None
 
 def show_timeseries(df):
