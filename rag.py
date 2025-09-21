@@ -10,6 +10,7 @@ from langchain_ollama import OllamaLLM
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
+import json
 
 # ----------------------------
 # 1. Setup LLaMA 3
@@ -96,7 +97,7 @@ def summarize_query(user_query: str, df) -> str:
 # 6. Example Usage
 # ----------------------------
 if __name__ == "__main__":
-    user_question = "Salinity data from 2015 onwards in the Bay of Bengal at 100m depth"
+    user_question = "Salinity data from 2012 onwards in the Bay of Bengal at 500m depth"
     
     sql_query = generate_sql(user_question)
     print("Generated SQL:\n", sql_query)
