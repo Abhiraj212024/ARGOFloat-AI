@@ -119,6 +119,7 @@ class RAGPipeline:
         {self.SCHEMA_TEXT}
 
         Instructions:
+        -Always include the corresponding latitude and longitude information.
         - Generate valid SQL in DuckDB syntax for the user question.
         - Only use columns that exist in the schema above.
         - Return ONLY the SQL query, no explanations or markdown formatting.
