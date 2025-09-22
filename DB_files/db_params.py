@@ -43,7 +43,7 @@ def get_min_max_constraints(db_path: str, table_name: str) -> str:
             # Skip columns that cannot be aggregated (e.g., strings without order)
             continue
     
-    return json.dumps(constraints)
+    return constraints
 
 CONSTRAINTS = get_min_max_constraints(db_path, table_name)
 print(CONSTRAINTS)
