@@ -7,15 +7,16 @@ import sys
 import os
 import uuid
 
-# Add the current directory to Python path to import rag module
+# Add the current directory to Python path to import modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Import our RAG pipeline
+# Import our modules
 try:
     from rag import create_rag_pipeline, RAGPipeline
+    from data_manager import DataManager
     RAG_AVAILABLE = True
 except ImportError as e:
-    st.error(f"Could not import RAG pipeline: {e}")
+    st.error(f"Could not import required modules: {e}")
     RAG_AVAILABLE = False
 
 st.set_page_config(layout="wide", page_title="FloatChat Dashboard")
@@ -44,10 +45,10 @@ def show_map(df):
             lon="lon", 
             color="temperature" if "temperature" in df.columns else None,
             hover_name="float_id" if "float_id" in df.columns else None,
-            hover_data={col: True for col in df.columns if col not in ["lat", "lon"]},
+            hover_data={col: True for col in df.columns if col not in ["lat", "lon"] and col in ["temperature", "salinity", "depth", "time"]},
             size_max=15,
             projection="natural earth",
-            title="ARGO Floats Geographic Distribution"
+            title="Ocean Float Geographic Distribution"
         )
         
         fig.update_layout(
@@ -130,55 +131,92 @@ def show_timeseries(df):
         st.error("No data available for time series visualization")
         return None
     
-    required_cols = ["cycle", "temperature", "salinity"]
-    missing_cols = [col for col in required_cols if col not in df.columns]
+    # Check for required columns - need either time or cycle, plus temp/salinity
+    has_time_axis = 'time' in df.columns or 'cycle' in df.columns
+    has_data = 'temperature' in df.columns or 'salinity' in df.columns
     
-    if missing_cols:
-        st.error(f"Time series plot requires columns: {', '.join(missing_cols)}")
+    if not has_time_axis:
+        st.error("Time series plot requires time or cycle column")
+        return None
+    
+    if not has_data:
+        st.error("Time series plot requires temperature or salinity data")
         return None
     
     try:
-        fig_ts = make_subplots(
-            rows=1, cols=2, 
-            subplot_titles=("Temperature vs Cycle", "Salinity vs Cycle"),
-            horizontal_spacing=0.1
-        )
+        # Determine x-axis (prefer time over cycle)
+        x_col = 'time' if 'time' in df.columns else 'cycle'
+        x_title = "Time" if x_col == 'time' else "Cycle #"
+        
+        # Create subplots only if we have both temperature and salinity
+        has_temp = 'temperature' in df.columns
+        has_sal = 'salinity' in df.columns
+        
+        if has_temp and has_sal:
+            fig_ts = make_subplots(
+                rows=1, cols=2, 
+                subplot_titles=("Temperature vs " + x_title, "Salinity vs " + x_title),
+                horizontal_spacing=0.1
+            )
 
-        # Temperature time series
-        fig_ts.add_trace(
-            go.Scatter(
-                x=df["cycle"], 
-                y=df["temperature"],
-                mode="lines+markers", 
-                name="Temperature",
-                line=dict(color="red", width=2),
-                marker=dict(size=6)
-            ), 
-            row=1, col=1
-        )
+            # Temperature time series
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=df[x_col], 
+                    y=df["temperature"],
+                    mode="lines+markers", 
+                    name="Temperature",
+                    line=dict(color="red", width=2),
+                    marker=dict(size=6)
+                ), 
+                row=1, col=1
+            )
 
-        # Salinity time series
-        fig_ts.add_trace(
-            go.Scatter(
-                x=df["cycle"], 
-                y=df["salinity"],
-                mode="lines+markers", 
-                name="Salinity",
-                line=dict(color="blue", width=2),
-                marker=dict(size=6)
-            ), 
-            row=1, col=2
-        )
+            # Salinity time series
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=df[x_col], 
+                    y=df["salinity"],
+                    mode="lines+markers", 
+                    name="Salinity",
+                    line=dict(color="blue", width=2),
+                    marker=dict(size=6)
+                ), 
+                row=1, col=2
+            )
 
-        # Update layout
-        fig_ts.update_xaxes(title="Cycle #")
-        fig_ts.update_yaxes(title="Temperature (°C)", row=1, col=1)
-        fig_ts.update_yaxes(title="Salinity (PSU)", row=1, col=2)
-        fig_ts.update_layout(
-            height=500,
-            title="Time Series Analysis",
-            showlegend=False
-        )
+            fig_ts.update_xaxes(title=x_title)
+            fig_ts.update_yaxes(title="Temperature (°C)", row=1, col=1)
+            fig_ts.update_yaxes(title="Salinity (PSU)", row=1, col=2)
+            fig_ts.update_layout(
+                height=500,
+                title="Time Series Analysis",
+                showlegend=False
+            )
+        else:
+            # Single plot for either temperature or salinity
+            y_col = 'temperature' if has_temp else 'salinity'
+            y_title = "Temperature (°C)" if has_temp else "Salinity (PSU)"
+            color = "red" if has_temp else "blue"
+            
+            fig_ts = go.Figure()
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=df[x_col],
+                    y=df[y_col],
+                    mode="lines+markers",
+                    name=y_col.title(),
+                    line=dict(color=color, width=2),
+                    marker=dict(size=6)
+                )
+            )
+            
+            fig_ts.update_layout(
+                title=f"{y_col.title()} vs {x_title}",
+                xaxis_title=x_title,
+                yaxis_title=y_title,
+                height=500
+            )
         
         return fig_ts
         
@@ -200,6 +238,11 @@ def classify_query(query: str) -> str:
         Query type: 'map', 'profile', 'timeseries', or 'rag'
     """
     query_lower = query.lower().strip()
+
+    #Rag-related keywords
+    rag_keywords = ["describe", "changing", "rag", "trend", "over time"]
+    if any(keyword in query_lower for keyword in rag_keywords):
+        return "rag"
     
     # Map-related keywords
     map_keywords = ["map", "location", "geographic", "geography", "where", "lat", "lon", "coordinate"]
@@ -212,7 +255,7 @@ def classify_query(query: str) -> str:
         return "profile"
     
     # Time series keywords
-    timeseries_keywords = ["time", "cycle", "temporal", "trend", "over time", "series", "timeline"]
+    timeseries_keywords = ["time", "cycle", "temporal", "trend", "series", "timeline"]
     if any(keyword in query_lower for keyword in timeseries_keywords):
         return "timeseries"
     
@@ -220,8 +263,17 @@ def classify_query(query: str) -> str:
     return "rag"
 
 # ----------------------------
-# RAG Pipeline Integration
+# Component Loading
 # ----------------------------
+@st.cache_resource
+def load_data_manager():
+    """Load and cache the DataManager instance."""
+    try:
+        return DataManager(db_path="./DB_files/data.duckdb", table_name="ocean_profiles", default_limit=100)
+    except Exception as e:
+        st.error(f"Error initializing DataManager: {e}")
+        return None
+
 @st.cache_resource
 def load_rag_pipeline():
     """Load and cache the RAG pipeline instance."""
@@ -230,7 +282,7 @@ def load_rag_pipeline():
     
     try:
         with st.spinner("Initializing RAG pipeline..."):
-            rag = create_rag_pipeline()
+            rag = create_rag_pipeline(db_path="./DB_files/data.duckdb", table_name="ocean_profiles")
             if rag.test_connection():
                 return rag
             else:
@@ -240,12 +292,13 @@ def load_rag_pipeline():
         st.error(f"Error initializing RAG pipeline: {e}")
         return None
 
-def handle_rag_query(rag_pipeline: RAGPipeline, query: str) -> dict:
+def handle_rag_query(rag_pipeline: RAGPipeline, data_manager: DataManager, query: str) -> dict:
     """
-    Process query through RAG pipeline.
+    Process query through RAG pipeline and update data manager.
     
     Args:
         rag_pipeline: Initialized RAG pipeline instance
+        data_manager: DataManager instance
         query: User query
         
     Returns:
@@ -259,7 +312,62 @@ def handle_rag_query(rag_pipeline: RAGPipeline, query: str) -> dict:
             "success": False
         }
     
-    return rag_pipeline.process_query(query)
+    # Check for requests to see sample data
+    if any(keyword in query.lower() for keyword in ["sample", "example", "show data", "see data"]):
+        try:
+            sample_data = rag_pipeline.get_sample_data()
+            if not sample_data.empty and "Error" not in sample_data.columns:
+                # Update data manager with sample data
+                fake_rag_result = {
+                    "success": True,
+                    "data": sample_data,
+                    "sql": f"SELECT * FROM {rag_pipeline.TABLE_NAME} LIMIT 5;",
+                    "answer": "Here's a sample of the available data:"
+                }
+                data_manager.update_from_rag_result(fake_rag_result, "sample")
+                return fake_rag_result
+        except:
+            pass
+    
+    # Process normal query
+    result = rag_pipeline.process_query(query)
+    
+    # If successful, update data manager
+    if result["success"] and not result["data"].empty and "Error" not in result["data"].columns:
+        data_manager.update_from_rag_result(result, classify_query(query))
+    
+    # If there's a date/time error, provide helpful suggestions
+    if not result["success"] and "date" in str(result.get("error", "")).lower():
+        try:
+            time_analysis = rag_pipeline.analyze_time_column_format()
+            suggestion = f"""
+            **Date/Time Format Issue Detected** 🕐
+            
+            The database seems to have date/time data in a different format than expected.
+            
+            **Sample time values:** {time_analysis['samples']}
+            
+            **Suggestions:**
+            - Try: "Show me sample data first"
+            - Rephrase using year: "salinity data from year 2015 onwards"  
+            - Or specify format: "salinity where time contains '2015'"
+            
+            {' '.join(time_analysis['suggestions'])}
+            """
+            result["answer"] = suggestion
+        except:
+            result["answer"] = """
+            **Date/Time Format Issue** 🕐
+            
+            It looks like the date/time column format doesn't match what was expected.
+            
+            Try:
+            - "Show me sample data" to see the date format
+            - Rephrase using "year 2015" instead of "2015 onwards"
+            - Use "time contains '2015'" for text-based date matching
+            """
+    
+    return result
 
 # ----------------------------
 # Main Application
@@ -269,19 +377,13 @@ def main():
     st.markdown("**Your AI Assistant for Oceanographic Data Analysis**")
     st.markdown("Ask me to show visualizations or answer detailed questions about ocean float data!")
     
-    # Load RAG pipeline
+    # Load components
     rag_pipeline = load_rag_pipeline() if RAG_AVAILABLE else None
+    data_manager = load_data_manager()
     
-    # Sample data for basic visualizations (fallback)
-    df_sample = pd.DataFrame({
-        "lat": [10.5, 20.3, -15.7, 30.2, 5.1],
-        "lon": [60.8, 80.1, -45.3, 120.7, 75.4],
-        "temperature": [28.5, 15.2, 22.1, 18.9, 26.3],
-        "cycle": [1, 2, 3, 4, 5],
-        "float_id": ["F001", "F002", "F003", "F004", "F005"],
-        "depth": [0, 50, 100, 150, 200],
-        "salinity": [35.1, 35.2, 35.0, 35.3, 35.1]
-    })
+    if not data_manager:
+        st.error("Failed to initialize data management system")
+        return
     
     # Initialize session state
     if "messages" not in st.session_state:
@@ -293,26 +395,29 @@ def main():
             if message["role"] == "assistant":
                 # Handle different types of assistant messages
                 if "chart_type" in message:
-                    # Recreate visualization using stored chart_id
+                    # Recreate visualization using stored chart_id and current data
                     chart_type = message["chart_type"]
-                    data = message.get("data", df_sample)
-                    chart_id = message.get("chart_id", f"fallback_{idx}")  # Fallback for old messages
+                    chart_id = message.get("chart_id", f"fallback_{idx}")
                     
+                    # Get appropriate data for visualization type
                     if chart_type == "map":
                         st.markdown("🗺️ **Geographic Distribution of Ocean Floats:**")
-                        fig = show_map(data)
+                        viz_data = data_manager.get_map_data()
+                        fig = show_map(viz_data)
                         if fig:
                             st.plotly_chart(fig, use_container_width=True, key=chart_id)
                     
                     elif chart_type == "profile":
                         st.markdown("📊 **Oceanographic Profiles vs Depth:**")
-                        fig = show_profile(data)
+                        viz_data = data_manager.get_profile_data()
+                        fig = show_profile(viz_data)
                         if fig:
                             st.plotly_chart(fig, use_container_width=True, key=chart_id)
                     
                     elif chart_type == "timeseries":
                         st.markdown("📈 **Time Series Analysis:**")
-                        fig = show_timeseries(data)
+                        viz_data = data_manager.get_timeseries_data()
+                        fig = show_timeseries(viz_data)
                         if fig:
                             st.plotly_chart(fig, use_container_width=True, key=chart_id)
                 
@@ -350,19 +455,19 @@ def main():
             
             if query_type == "map":
                 st.markdown("🗺️ **Geographic Distribution of Ocean Floats:**")
-                fig = show_map(df_sample)
+                viz_data = data_manager.get_map_data()
+                fig = show_map(viz_data)
                 if fig:
-                    chart_id = str(uuid.uuid4())  # Generate unique ID
+                    chart_id = str(uuid.uuid4())
                     st.plotly_chart(fig, use_container_width=True, key=chart_id)
                     # Store in session state with unique chart ID
                     st.session_state.messages.append({
                         "role": "assistant",
                         "chart_type": "map",
-                        "data": df_sample,
                         "chart_id": chart_id
                     })
                 else:
-                    error_msg = "Unable to generate map visualization."
+                    error_msg = "Unable to generate map visualization with current data."
                     st.error(error_msg)
                     st.session_state.messages.append({
                         "role": "assistant",
@@ -371,19 +476,19 @@ def main():
             
             elif query_type == "profile":
                 st.markdown("📊 **Oceanographic Profiles vs Depth:**")
-                fig = show_profile(df_sample)
+                viz_data = data_manager.get_profile_data()
+                fig = show_profile(viz_data)
                 if fig:
-                    chart_id = str(uuid.uuid4())  # Generate unique ID
+                    chart_id = str(uuid.uuid4())
                     st.plotly_chart(fig, use_container_width=True, key=chart_id)
                     # Store in session state with unique chart ID
                     st.session_state.messages.append({
                         "role": "assistant",
                         "chart_type": "profile",
-                        "data": df_sample,
                         "chart_id": chart_id
                     })
                 else:
-                    error_msg = "Unable to generate profile visualization."
+                    error_msg = "Unable to generate profile visualization with current data."
                     st.error(error_msg)
                     st.session_state.messages.append({
                         "role": "assistant",
@@ -392,19 +497,19 @@ def main():
             
             elif query_type == "timeseries":
                 st.markdown("📈 **Time Series Analysis:**")
-                fig = show_timeseries(df_sample)
+                viz_data = data_manager.get_timeseries_data()
+                fig = show_timeseries(viz_data)
                 if fig:
-                    chart_id = str(uuid.uuid4())  # Generate unique ID
+                    chart_id = str(uuid.uuid4())
                     st.plotly_chart(fig, use_container_width=True, key=chart_id)
                     # Store in session state with unique chart ID
                     st.session_state.messages.append({
                         "role": "assistant",
-                        "chart_type": "timeseries", 
-                        "data": df_sample,
+                        "chart_type": "timeseries",
                         "chart_id": chart_id
                     })
                 else:
-                    error_msg = "Unable to generate time series visualization."
+                    error_msg = "Unable to generate time series visualization with current data."
                     st.error(error_msg)
                     st.session_state.messages.append({
                         "role": "assistant",
@@ -430,7 +535,7 @@ def main():
                     })
                 else:
                     with st.spinner("🤔 Analyzing your question..."):
-                        result = handle_rag_query(rag_pipeline, prompt)
+                        result = handle_rag_query(rag_pipeline, data_manager, prompt)
                         
                         # Display the answer
                         st.markdown(result["answer"])
@@ -456,6 +561,26 @@ def main():
 
     # Sidebar with helpful information
     with st.sidebar:
+        st.subheader("📊 Current Data Status")
+        data_info = data_manager.get_data_info()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Data Source", data_info["source"].title())
+            st.metric("Total Points", data_info["row_count"])
+        with col2:
+            st.metric("Float Count", data_info["float_count"])
+            if data_info.get("date_range"):
+                st.metric("Date Range", f"{data_info['date_range']['start']} to {data_info['date_range']['end']}")
+        
+        # Data capabilities
+        st.subheader("🎯 Available Visualizations")
+        viz_types = ["map", "profile", "timeseries"]
+        for viz_type in viz_types:
+            suitable, reason = data_manager.is_suitable_for_visualization(viz_type)
+            status = "✅" if suitable else "❌"
+            st.text(f"{status} {viz_type.title()}: {reason}")
+        
         st.subheader("💡 How to Use FloatChat")
         
         st.markdown("""
@@ -483,18 +608,38 @@ def main():
                     with st.expander("📊 Available Data Columns"):
                         for col in columns:
                             st.text(f"• {col}")
+                            
+                    # Also show sample data
+                    with st.expander("🔍 Sample Data Preview"):
+                        try:
+                            sample_data = rag_pipeline.get_sample_data(3)
+                            if not sample_data.empty and "Error" not in sample_data.columns:
+                                st.dataframe(sample_data, use_container_width=True)
+                            else:
+                                st.text("Could not retrieve sample data")
+                        except:
+                            st.text("Sample data unavailable")
             except:
                 pass
         else:
             st.warning("⚠️ RAG Pipeline: Unavailable")
         
-        st.info("💾 Visualizations: Sample Data")
+        st.success("✅ Data Manager: Active")
         
-        # Quick stats
-        st.subheader("📈 Quick Stats")
-        st.metric("Sample Float Count", len(df_sample))
-        st.metric("Temperature Range", f"{df_sample['temperature'].min():.1f}°C - {df_sample['temperature'].max():.1f}°C")
-        st.metric("Depth Range", f"{df_sample['depth'].min()}m - {df_sample['depth'].max()}m")
+        # Quick stats from DataManager
+        st.subheader("📈 Data Summary")
+        if data_info.get("temp_range"):
+            temp_range = f"{data_info['temp_range']['min']:.1f}°C - {data_info['temp_range']['max']:.1f}°C"
+            st.metric("Temperature Range", temp_range)
+        
+        if data_info.get("depth_range"):
+            depth_range = f"{data_info['depth_range']['min']:.0f}m - {data_info['depth_range']['max']:.0f}m"
+            st.metric("Depth Range", depth_range)
+        
+        # Reset button
+        if st.button("🔄 Reset to Default Data"):
+            data_manager.reset_to_default()
+            st.rerun()
 
 if __name__ == "__main__":
     main()

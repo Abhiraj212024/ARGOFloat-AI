@@ -13,7 +13,7 @@ class DataManager:
     Uses real database data instead of generating random samples.
     """
     
-    def __init__(self, db_path: str = "./data.duckdb", table_name: str = "ocean_profiles", default_limit: int = 100):
+    def __init__(self, db_path: str = "./DB_files/data.duckdb", table_name: str = "ocean_profiles", default_limit: int = 100):
         """
         Initialize DataManager with real data from database.
         
@@ -31,12 +31,14 @@ class DataManager:
         
         # Column mappings for your actual database schema
         self.column_mappings = {
-            'latitude': 'lat',
-            'longitude': 'lon', 
-            'temp': 'temperature',
-            'psal': 'salinity',
-            'pres': 'pressure',
-            'depth': 'n_levels'
+            'latitude' : 'lat',
+            'longitude' : 'lon', 
+            'temp' : 'temperature',
+            'psal' : 'salinity',
+            'pres' : 'pres',
+            'n_levels' : 'depth',
+            'time' : 'time',
+            'n_prof' : 'float_id'
         }
         
         # Required columns for different visualizations
@@ -433,124 +435,4 @@ class DataManager:
             self.default_limit = limit
         
         self._load_default_data()
-return data
         
-        # Get profile for specific float or first available
-        if float_id and 'float_id' in data.columns:
-            profile_data = data[data['float_id'] == float_id]
-        else:
-            # Get first float's profile
-            if 'float_id' in data.columns:
-                first_float = data['float_id'].iloc[0]
-                profile_data = data[data['float_id'] == first_float]
-            else:
-                profile_data = data
-        
-        # Sort by depth for proper profile visualization
-        if 'depth' in profile_data.columns:
-            profile_data = profile_data.sort_values('depth')
-        
-        return profile_data
-    
-    def get_timeseries_data(self) -> pd.DataFrame:
-        """Get data for time series visualization."""
-        data = self.get_current_data()
-        if data.empty:
-            return data
-        
-        # Group by time/cycle and get averages
-        if 'time' in data.columns:
-            # Group by time and calculate means
-            timeseries_data = data.groupby('time').agg({
-                'temperature': 'mean',
-                'salinity': 'mean',
-                'depth': 'mean',
-                'cycle': 'first'  # Keep original cycle numbering
-            }).reset_index()
-        elif 'cycle' in data.columns:
-            # Use cycle as time proxy
-            timeseries_data = data.groupby('cycle').agg({
-                'temperature': 'mean',
-                'salinity': 'mean',
-                'depth': 'mean'
-            }).reset_index()
-        else:
-            # Create artificial time series based on row order
-            data = data.copy()
-            data['cycle'] = range(1, len(data) + 1)
-            timeseries_data = data
-        
-        return timeseries_data
-    
-    def get_data_info(self) -> Dict:
-        """Get information about current data."""
-        data = self.get_current_data()
-        
-        info = {
-            "source": self.data_source,
-            "last_updated": self.last_updated,
-            "row_count": len(data) if not data.empty else 0,
-            "columns": list(data.columns) if not data.empty else [],
-            "float_count": data['float_id'].nunique() if 'float_id' in data.columns else 0,
-            "date_range": None,
-            "has_location": all(col in data.columns for col in ['lat', 'lon']),
-            "has_depth": 'depth' in data.columns,
-            "has_temperature": 'temperature' in data.columns,
-            "has_salinity": 'salinity' in data.columns
-        }
-        
-        # Get date range if time column exists
-        if 'time' in data.columns and not data.empty:
-            try:
-                dates = pd.to_datetime(data['time'], errors='coerce')
-                dates = dates.dropna()
-                if not dates.empty:
-                    info["date_range"] = {
-                        "start": dates.min().strftime('%Y-%m-%d'),
-                        "end": dates.max().strftime('%Y-%m-%d')
-                    }
-            except:
-                pass
-        
-        return info
-    
-    def reset_to_default(self):
-        """Reset to default data."""
-        self._generate_default_data()
-        logger.info("Data reset to default")
-    
-    def is_suitable_for_visualization(self, viz_type: str) -> tuple[bool, str]:
-        """
-        Check if current data is suitable for a specific visualization.
-        
-        Args:
-            viz_type: 'map', 'profile', or 'timeseries'
-            
-        Returns:
-            Tuple of (is_suitable, reason)
-        """
-        data = self.get_current_data()
-        
-        if data.empty:
-            return False, "No data available"
-        
-        if viz_type == "map":
-            if not all(col in data.columns for col in ['lat', 'lon']):
-                return False, "Missing latitude/longitude data"
-            return True, "Map data available"
-        
-        elif viz_type == "profile":
-            required_cols = ['temperature', 'salinity', 'depth']
-            missing_cols = [col for col in required_cols if col not in data.columns]
-            if missing_cols:
-                return False, f"Missing columns for profile: {', '.join(missing_cols)}"
-            return True, "Profile data available"
-        
-        elif viz_type == "timeseries":
-            if not any(col in data.columns for col in ['time', 'cycle']):
-                return False, "Missing time/cycle data"
-            if not any(col in data.columns for col in ['temperature', 'salinity']):
-                return False, "Missing temperature/salinity data"
-            return True, "Time series data available"
-        
-        return False, f"Unknown visualization type: {viz_type}"
