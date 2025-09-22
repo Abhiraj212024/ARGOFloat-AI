@@ -3,6 +3,7 @@ numpy
 pandas
 xarray
 netCDF4
+tabulate
 
 # Data storage and querying
 duckdb
