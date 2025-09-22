@@ -272,14 +272,23 @@ def main():
     
     # Sample data for basic visualizations (fallback)
     df_sample = pd.DataFrame({
-        "lat": [10.5, 20.3, -15.7, 30.2, 5.1],
-        "lon": [60.8, 80.1, -45.3, 120.7, 75.4],
-        "temperature": [28.5, 15.2, 22.1, 18.9, 26.3],
-        "cycle": [1, 2, 3, 4, 5],
-        "float_id": ["F001", "F002", "F003", "F004", "F005"],
-        "depth": [0, 50, 100, 150, 200],
-        "salinity": [35.1, 35.2, 35.0, 35.3, 35.1]
+        "lat": [],
+        "lon": [],
+        "temperature": [],
+        "cycle": [],
+        "float_id": [],
+        "depth": [],
+        "salinity": []
     })
+    # df_sample = pd.DataFrame({
+    #     "lat": [10.5, 20.3, -15.7, 30.2, 5.1],
+    #     "lon": [60.8, 80.1, -45.3, 120.7, 75.4],
+    #     "temperature": [28.5, 15.2, 22.1, 18.9, 26.3],
+    #     "cycle": [1, 2, 3, 4, 5],
+    #     "float_id": ["F001", "F002", "F003", "F004", "F005"],
+    #     "depth": [0, 50, 100, 150, 200],
+    #     "salinity": [35.1, 35.2, 35.0, 35.3, 35.1]
+    # })
     
     # Initialize session state
     if "messages" not in st.session_state:
