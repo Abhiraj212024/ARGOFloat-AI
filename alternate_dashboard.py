@@ -255,7 +255,7 @@ def classify_query(query: str) -> str:
         return "profile"
     
     # Time series keywords
-    timeseries_keywords = ["time", "cycle", "temporal", "trend", "series", "timeline"]
+    timeseries_keywords = ["display", "time", "cycle", "temporal", "trend", "series", "timeline", "plot"]
     if any(keyword in query_lower for keyword in timeseries_keywords):
         return "timeseries"
     
@@ -269,7 +269,7 @@ def classify_query(query: str) -> str:
 def load_data_manager():
     """Load and cache the DataManager instance."""
     try:
-        return DataManager(db_path="./DB_files/data.duckdb", table_name="ocean_profiles", default_limit=100)
+        return DataManager(db_path="./DB_files/data.duckdb", table_name="ocean_profiles", default_limit=1000)
     except Exception as e:
         st.error(f"Error initializing DataManager: {e}")
         return None
@@ -321,7 +321,7 @@ def handle_rag_query(rag_pipeline: RAGPipeline, data_manager: DataManager, query
                 fake_rag_result = {
                     "success": True,
                     "data": sample_data,
-                    "sql": f"SELECT * FROM {rag_pipeline.TABLE_NAME} LIMIT 5;",
+                    "sql": f"SELECT * FROM {rag_pipeline.TABLE_NAME} LIMIT 100;",
                     "answer": "Here's a sample of the available data:"
                 }
                 data_manager.update_from_rag_result(fake_rag_result, "sample")

@@ -127,7 +127,7 @@ class RAGPipeline:
         - Use appropriate WHERE clauses to filter data based on the question.
         - Use aggregation functions (AVG, COUNT, MAX, MIN, SUM) when appropriate.
         - For date/time queries, assume date columns are in standard formats.
-        - Limit results to reasonable numbers (e.g., LIMIT 100) unless specifically asked for all data.
+        - Limit results to reasonable numbers (e.g., LIMIT 1000) unless specifically asked for all data.
         """
         
         try:
