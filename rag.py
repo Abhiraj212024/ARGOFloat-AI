@@ -227,7 +227,7 @@ class RAGPipeline:
 
         try:
             prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt)
+                ("system", system_prompt),
                 ("human", "{question}")
             ])
             
@@ -283,6 +283,7 @@ class RAGPipeline:
         Returns:
             Natural language summary
         """
+        temp_llm = OllamaLLM(model="gemma:2b")
         if df.empty:
             return "No data found for your query. Please try rephrasing your question or check if the data exists in the database."
         
@@ -316,7 +317,7 @@ class RAGPipeline:
             - Don't make assumptions beyond what the data shows.
             """
             
-            summary = self.llm.invoke(prompt_text)
+            summary = temp_llm.invoke(prompt_text)
             logger.info("Summary generated successfully")
             return summary
             
