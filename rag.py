@@ -102,6 +102,19 @@ class RAGPipeline:
         return sql
     
     def query_similarity_search(client : chromadb.PersistentClient, collection_names : list[str], user_query : str, threshold : int=0.6, top_k : int =5) -> str:
+        """
+        Returns similar queries above with cosine similarity > threshold upto limit top_k.
+        
+        Args:
+            client : ChromaDB client
+            collection_names: name of the collections in chromaDB
+            user_query: input by the user
+            threshold: only queries with cosine_similarity > threshold are given
+            top_k: returns atmost too_k many examples
+        
+        Returns:
+            Most similar queries in String format
+        """
         #cosine similarity < threshold
         matches = []
 
@@ -153,7 +166,7 @@ class RAGPipeline:
             raise Exception("LLM not initialized")
         
         system_prompt = f"""
-        You are an expert SQL assistant specializing in oceanographic data analysis.
+        You are an expert DuckDB SQL assistant specializing in oceanographic data analysis.
 
         The database has a single table with the following schema:
         {self.SCHEMA_TEXT}
@@ -161,9 +174,9 @@ class RAGPipeline:
         Instructions:
         - Always include all the corresponding fields (n_prof, n_levels, pres, temp, psal, latitude, longitude, time).
         - If not specified, do not add constraints on longitude and latitude
-        - Generate valid SQL in DuckDB syntax for the user question.
+        - Generate valid DuckDB SQL for the user question.
         - Only use columns that exist in the schema above.
-        - Return ONLY the SQL query, no explanations or markdown formatting.
+        - Return ONLY the DuckDB SQL query, no explanations or markdown formatting.
         - Use appropriate WHERE clauses to filter data based on the question.
         - Use aggregation functions (AVG, COUNT, MAX, MIN, SUM) when appropriate.
         - For date/time queries, assume date columns are in standard formats.
