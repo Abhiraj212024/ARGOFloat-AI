@@ -239,7 +239,7 @@ class RAGPipeline:
             logger.error(f"Error in code_checker: {e}")
             raise Exception(f"Failed to fix SQL: {str(e)}")
 
-    def run_sql(self, sql_query: str) -> pd.DataFrame:
+    def run_sql(self, sql_query: str, user_query : str) -> pd.DataFrame:
         """
         Execute SQL query against the database.
         
@@ -258,9 +258,19 @@ class RAGPipeline:
             return result_df
             
         except Exception as e:
-            logger.error(f"Error executing SQL: {e}")
-            # Return error as DataFrame for consistent handling
-            return pd.DataFrame({"Error": [str(e)]})
+            logger.warning(f"SQL execution failed: {e}")
+            logger.info("Attempting to fix SQL with code checker...")
+
+            try:
+                fixed_sql = self.code_checker(user_query=user_query, last_sql= sql_query, error_msg=str(e))
+                logger.info(f"Fixed SQL : {fixed_sql}")
+                con = duckdb.connect(self.DB_PATH)
+                result_df = con.execute(fixed_sql).fetch_df()
+                con.close()
+                return result_df
+            except Exception as fix_e:
+                logger.error(f"Fix attempt failed: {fix_e}")
+                return pd.DataFrame({"Error" : [str(fix_e)]})
 
     def summarize_query(self, user_query: str, df: pd.DataFrame) -> str:
         """
@@ -329,7 +339,7 @@ class RAGPipeline:
             sql_query = self.generate_sql(user_query)
             
             # Execute query
-            data = self.run_sql(sql_query)
+            data = self.run_sql(sql_query, user_query)
             
             # Generate summary
             answer = self.summarize_query(user_query, data)
