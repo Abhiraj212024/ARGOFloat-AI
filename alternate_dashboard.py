@@ -134,7 +134,7 @@ def show_timeseries(df):
     # Check for required columns - need either time or cycle, plus temp/salinity
     has_time_axis = 'time' in df.columns or 'cycle' in df.columns
     has_data = 'temperature' in df.columns or 'salinity' in df.columns
-    
+
     if not has_time_axis:
         st.error("Time series plot requires time or cycle column")
         return None
