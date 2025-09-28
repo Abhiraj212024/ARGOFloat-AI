@@ -47,7 +47,8 @@ user_query = "get annual salinity trends"
 results = query_collections(client, COLLECTION_CANDIDATES, user_query, threshold=1, top_k=5)
 
 if results:
-    for r in results:
-        print(f"[{r['collection']}] NL: {r['nl_query']} -> SQL: {r['sql_query']} (distance={r['distance']:.4f})")
+    context = "\n".join([f"Natural Language: {r['nl_query']} -> SQL: {r['sql_query']} (distance={r['distance']:.4f})" for r in results])
+    print("Examples for SQL generation:\n", context)
+
 else:
     print("No matches found above threshold.")

@@ -4,6 +4,7 @@ import os
 os.environ['LANGCHAIN_TRACING_V2'] = 'true'
 os.environ['LANGCHAIN_ENDPOINT'] = 'https://api.smith.langchain.com'
 LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
+COLLECTION_CANDIDATES = "duckdb_sql_queries"  # Name of the collection in ChromaDB
 
 import duckdb
 import pandas as pd
@@ -14,10 +15,13 @@ from langchain_core.output_parsers import StrOutputParser
 import json
 from typing import Dict, Any, Optional
 import logging
+import chromadb
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
 
 class RAGPipeline:
     """
@@ -25,7 +29,7 @@ class RAGPipeline:
     Handles natural language to SQL conversion and result summarization.
     """
     
-    def __init__(self, db_path: str = "./DB_files/data.duckdb", table_name: str = "ocean_profiles"):
+    def __init__(self, db_path: str = "./DB_files/data.duckdb", table_name: str = "ocean_profiles", vector_db_path: str = "./sql_query_vectors"):
         """
         Initialize the RAG pipeline.
         
@@ -98,6 +102,39 @@ class RAGPipeline:
         # Remove any leading/trailing whitespace and ensure it ends properly
         sql = sql.rstrip(';') + ';' if sql and not sql.endswith(';') else sql #to be tested
         return sql
+    
+    def query_similarity_search(client : chromadb.PersistentClient, collection_names : list[str], user_query : str, threshold : int=0.6, top_k : int =5):
+        #cosine similarity < threshold
+        matches = []
+
+        #get list of actually existing collections
+        existing = [c.name for c in client.list_collections()]
+        for col_name in collection_names:
+            if col_name not in existing:
+                print(f"⚠️ Skipping missing collection: {col_name}")
+                continue
+
+            collection = client.get_collection(col_name)
+
+            results = collection.query(
+                query_texts=[user_query],
+                n_results=top_k,
+                include=["metadatas", "documents", "distances"]
+            )
+
+            documents = results["documents"][0]
+            metadatas = results["metadatas"][0]
+            distances = results["distances"][0]
+
+            for doc, meta, dist in zip(documents, metadatas, distances):
+                if dist <= threshold:
+                    matches.append({
+                        "collection": col_name,
+                        "nl_query": doc,
+                        "sql_query": meta.get("sql") or meta.get("sql_query"),
+                        "distance": dist
+                    })
+        return  sorted(matches, key=lambda x: x["distance"])
 
     def generate_sql(self, user_query: str) -> str:
         """
