@@ -101,7 +101,7 @@ class RAGPipeline:
         sql = sql.rstrip(';') + ';' if sql and not sql.endswith(';') else sql #to be tested
         return sql
     
-    def query_similarity_search(client : chromadb.PersistentClient, collection_names : list[str], user_query : str, threshold : int=0.6, top_k : int =5) -> str:
+    def query_similarity_search(self, client : chromadb.PersistentClient, collection_names : list[str], user_query : str, threshold : int=0.6, top_k : int =5) -> str:
         """
         Returns similar queries above with cosine similarity > threshold upto limit top_k.
         
@@ -199,6 +199,45 @@ class RAGPipeline:
         except Exception as e:
             logger.error(f"Error generating SQL: {e}")
             raise Exception(f"Failed to generate SQL query: {str(e)}")
+        
+    def code_checker(self, user_query : str, last_sql : str, error_msg : str)->str:
+        """
+            Ask the LLM to fix the last SQL query based on the error message
+        """
+
+        if not self.llm:
+            raise Exception("LLM not initialized")
+        
+        system_prompt = f"""
+            You are an expert DuckDB SQL assistant.
+            The database schema is:
+            {self.SCHEMA_TEXT}
+
+            The user asked: {user_query}
+
+            The last generated SQL was:
+            {last_sql}
+
+            This SQL produced the following error when executed:
+            {error_msg}
+
+            Fix the SQL query so it runs correctly in DuckDB and satisfies the user's request.
+            Return ONLY the corrected SQL query, with no explanation.
+        """
+
+        try:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_prompt)
+                ("human", "{question}")
+            ])
+            
+            chain = prompt | self.llm | StrOutputParser()
+            fixed_sql = chain.invoke({"question" : user_query})
+            return self.clean_sql(fixed_sql)
+        
+        except Exception as e:
+            logger.error(f"Error in code_checker: {e}")
+            raise Exception(f"Failed to fix SQL: {str(e)}")
 
     def run_sql(self, sql_query: str) -> pd.DataFrame:
         """
