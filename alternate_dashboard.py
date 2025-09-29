@@ -76,6 +76,33 @@ def show_profile(df):
         return None
     
     try:
+        # Get a single representative profile
+        # Option 1: Use the profile with most depth levels
+        if 'float_id' in df.columns:
+            # Count depth measurements per float
+            float_counts = df.groupby('float_id').size()
+            best_float = float_counts.idxmax()
+            profile_data = df[df['float_id'] == best_float].copy()
+        else:
+            # If no float_id, just use all data but group by depth
+            profile_data = df.copy()
+        
+        # Sort by depth and remove duplicates at same depth (take mean)
+        profile_data = profile_data.groupby('depth').agg({
+            'temperature': 'mean',
+            'salinity': 'mean'
+        }).reset_index()
+        
+        # Sort by depth for proper profile
+        profile_data = profile_data.sort_values('depth')
+        
+        # Remove any NaN values
+        profile_data = profile_data.dropna(subset=['temperature', 'salinity', 'depth'])
+        
+        if profile_data.empty:
+            st.error("No valid profile data after filtering")
+            return None
+        
         fig = make_subplots(
             rows=1, cols=2, 
             shared_yaxes=True,
@@ -86,12 +113,12 @@ def show_profile(df):
         # Temperature profile
         fig.add_trace(
             go.Scatter(
-                x=df["temperature"], 
-                y=df["depth"], 
+                x=profile_data["temperature"], 
+                y=profile_data["depth"], 
                 mode="lines+markers",
                 name="Temperature",
                 line=dict(color="red", width=2),
-                marker=dict(size=6)
+                marker=dict(size=4)
             ), 
             col=1, row=1
         )
@@ -99,12 +126,12 @@ def show_profile(df):
         # Salinity profile
         fig.add_trace(
             go.Scatter(
-                x=df["salinity"], 
-                y=df["depth"], 
+                x=profile_data["salinity"], 
+                y=profile_data["depth"], 
                 mode="lines+markers",
                 name="Salinity",
                 line=dict(color="blue", width=2),
-                marker=dict(size=6)
+                marker=dict(size=4)
             ), 
             col=2, row=1
         )
@@ -131,7 +158,6 @@ def show_timeseries(df):
         st.error("No data available for time series visualization")
         return None
     
-    # Check for required columns - need either time or cycle, plus temp/salinity
     has_time_axis = 'time' in df.columns or 'cycle' in df.columns
     has_data = 'temperature' in df.columns or 'salinity' in df.columns
 
@@ -144,13 +170,40 @@ def show_timeseries(df):
         return None
     
     try:
-        # Determine x-axis (prefer time over cycle)
-        x_col = 'time' if 'time' in df.columns else 'cycle'
-        x_title = "Time" if x_col == 'time' else "Cycle #"
+        # Convert time column to datetime if it exists
+        if 'time' in df.columns:
+            df = df.copy()
+            df['time'] = pd.to_datetime(df['time'], errors='coerce')
+            df = df.dropna(subset=['time'])
+            
+            # Sort by time
+            df = df.sort_values('time')
+            
+            # Aggregate by month for clearer trends (especially for multi-year data)
+            df['year_month'] = df['time'].dt.to_period('M')
+            
+            # Group by month and calculate mean values
+            monthly_data = df.groupby('year_month').agg({
+                'temperature': 'mean',
+                'salinity': 'mean'
+            }).reset_index()
+            
+            # Convert period back to timestamp for plotting
+            monthly_data['time'] = monthly_data['year_month'].dt.to_timestamp()
+            
+            x_col = 'time'
+            x_title = "Time (Monthly Averages)"
+            plot_data = monthly_data
+            
+        else:
+            # Use cycle as fallback
+            x_col = 'cycle'
+            x_title = "Cycle #"
+            plot_data = df.sort_values('cycle')
         
         # Create subplots only if we have both temperature and salinity
-        has_temp = 'temperature' in df.columns
-        has_sal = 'salinity' in df.columns
+        has_temp = 'temperature' in plot_data.columns
+        has_sal = 'salinity' in plot_data.columns
         
         if has_temp and has_sal:
             fig_ts = make_subplots(
@@ -162,12 +215,12 @@ def show_timeseries(df):
             # Temperature time series
             fig_ts.add_trace(
                 go.Scatter(
-                    x=df[x_col], 
-                    y=df["temperature"],
+                    x=plot_data[x_col], 
+                    y=plot_data["temperature"],
                     mode="lines+markers", 
                     name="Temperature",
                     line=dict(color="red", width=2),
-                    marker=dict(size=6)
+                    marker=dict(size=4)
                 ), 
                 row=1, col=1
             )
@@ -175,12 +228,12 @@ def show_timeseries(df):
             # Salinity time series
             fig_ts.add_trace(
                 go.Scatter(
-                    x=df[x_col], 
-                    y=df["salinity"],
+                    x=plot_data[x_col], 
+                    y=plot_data["salinity"],
                     mode="lines+markers", 
                     name="Salinity",
                     line=dict(color="blue", width=2),
-                    marker=dict(size=6)
+                    marker=dict(size=4)
                 ), 
                 row=1, col=2
             )
@@ -202,12 +255,12 @@ def show_timeseries(df):
             fig_ts = go.Figure()
             fig_ts.add_trace(
                 go.Scatter(
-                    x=df[x_col],
-                    y=df[y_col],
+                    x=plot_data[x_col],
+                    y=plot_data[y_col],
                     mode="lines+markers",
                     name=y_col.title(),
                     line=dict(color=color, width=2),
-                    marker=dict(size=6)
+                    marker=dict(size=4)
                 )
             )
             
@@ -223,7 +276,6 @@ def show_timeseries(df):
     except Exception as e:
         st.error(f"Error creating time series plot: {str(e)}")
         return None
-
 # ----------------------------
 # Query Classification
 # ----------------------------
@@ -269,7 +321,7 @@ def classify_query(query: str) -> str:
 def load_data_manager():
     """Load and cache the DataManager instance."""
     try:
-        return DataManager(db_path="./DB_files/data.duckdb", table_name="ocean_profiles", default_limit=1000)
+        return DataManager(db_path="./DB_files/data.duckdb", table_name="ocean_profiles", default_limit=1000000)
     except Exception as e:
         st.error(f"Error initializing DataManager: {e}")
         return None

@@ -180,7 +180,6 @@ class RAGPipeline:
         - Use appropriate WHERE clauses to filter data based on the question.
         - Use aggregation functions (AVG, COUNT, MAX, MIN, SUM) when appropriate.
         - For date/time queries, assume date columns are in standard formats.
-        - Limit results to reasonable numbers (e.g., LIMIT 1000) unless specifically asked for all data.
         """
         
         try:
@@ -251,11 +250,11 @@ class RAGPipeline:
         """
         try:
             con = duckdb.connect(self.DB_PATH)
-            result_df = con.execute(sql_query).fetchdf()
+            result_df = con.execute(sql_query).fetchdf().dropna(axis=0)
             con.close()
             
             logger.info(f"Query executed successfully, returned {len(result_df)} rows")
-            return result_df
+            return result_df.dropna(axis=0)
             
         except Exception as e:
             logger.warning(f"SQL execution failed: {e}")
@@ -267,7 +266,7 @@ class RAGPipeline:
                 con = duckdb.connect(self.DB_PATH)
                 result_df = con.execute(fixed_sql).fetch_df()
                 con.close()
-                return result_df
+                return result_df.dropna(axis=0)
             except Exception as fix_e:
                 logger.error(f"Fix attempt failed: {fix_e}")
                 return pd.DataFrame({"Error" : [str(fix_e)]})

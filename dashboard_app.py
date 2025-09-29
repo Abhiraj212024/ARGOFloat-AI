@@ -92,34 +92,93 @@ def show_map(df):
         return None
     
 def show_profile(df):
-    def show_map(df):
-        if df.empty:
-            st.error("No data available for map visualization")
+    """Create depth profile visualization for temperature and salinity."""
+    if df.empty:
+        st.error("No data available for profile visualization")
         return None
     
-    required_cols = ["lat", "lon"]
+    required_cols = ["temperature", "salinity", "depth"]
     missing_cols = [col for col in required_cols if col not in df.columns]
     
     if missing_cols:
-        st.error(f"Map requires columns: {', '.join(missing_cols)}")
+        st.error(f"Profile plot requires columns: {', '.join(missing_cols)}")
         return None
     
     try:
-        fig = px.scatter_mapbox(
-            df,
-            lat="lat",
-            lon="lon",
-            color="temperature" if "temperature" in df.columns else None,
-            hover_name="float_id" if "float_id" in df.columns else None,
-            hover_data={col: True for col in df.columns if col not in ["lat", "lon"]},
-            size_max=15,
-            zoom=1,
-            mapbox_style="carto-darkmatter"  # 🌑 Dark background
+        # Get a single representative profile
+        # Option 1: Use the profile with most depth levels
+        if 'float_id' in df.columns:
+            # Count depth measurements per float
+            float_counts = df.groupby('float_id').size()
+            best_float = float_counts.idxmax()
+            profile_data = df[df['float_id'] == best_float].copy()
+        else:
+            # If no float_id, just use all data but group by depth
+            profile_data = df.copy()
+        
+        # Sort by depth and remove duplicates at same depth (take mean)
+        profile_data = profile_data.groupby('depth').agg({
+            'temperature': 'mean',
+            'salinity': 'mean'
+        }).reset_index()
+        
+        # Sort by depth for proper profile
+        profile_data = profile_data.sort_values('depth')
+        
+        # Remove any NaN values
+        profile_data = profile_data.dropna(subset=['temperature', 'salinity', 'depth'])
+        
+        if profile_data.empty:
+            st.error("No valid profile data after filtering")
+            return None
+        
+        fig = make_subplots(
+            rows=1, cols=2, 
+            shared_yaxes=True,
+            subplot_titles=("Temperature (°C)", "Salinity (PSU)"),
+            horizontal_spacing=0.1
         )
-        fig.update_layout(height=600, showlegend=True)
+
+        # Temperature profile
+        fig.add_trace(
+            go.Scatter(
+                x=profile_data["temperature"], 
+                y=profile_data["depth"], 
+                mode="lines+markers",
+                name="Temperature",
+                line=dict(color="red", width=2),
+                marker=dict(size=4)
+            ), 
+            col=1, row=1
+        )
+        
+        # Salinity profile
+        fig.add_trace(
+            go.Scatter(
+                x=profile_data["salinity"], 
+                y=profile_data["depth"], 
+                mode="lines+markers",
+                name="Salinity",
+                line=dict(color="blue", width=2),
+                marker=dict(size=4)
+            ), 
+            col=2, row=1
+        )
+
+        # Update layout
+        fig.update_yaxes(autorange="reversed", title="Depth (m)")
+        fig.update_xaxes(title="Temperature (°C)", col=1)
+        fig.update_xaxes(title="Salinity (PSU)", col=2)
+        fig.update_layout(
+            height=600,
+            title="Oceanographic Profiles vs Depth",
+            showlegend=False
+        )
+        
         return fig
+        
     except Exception as e:
-        st.error(f"Error creating map: {str(e)}")
+        st.error(f"Error creating profile plot: {str(e)}")
         return None
 
 def show_timeseries(df):
@@ -128,62 +187,124 @@ def show_timeseries(df):
         st.error("No data available for time series visualization")
         return None
     
-    required_cols = ["cycle", "temperature", "salinity"]
-    missing_cols = [col for col in required_cols if col not in df.columns]
+    has_time_axis = 'time' in df.columns or 'cycle' in df.columns
+    has_data = 'temperature' in df.columns or 'salinity' in df.columns
+
+    if not has_time_axis:
+        st.error("Time series plot requires time or cycle column")
+        return None
     
-    if missing_cols:
-        st.error(f"Time series plot requires columns: {', '.join(missing_cols)}")
+    if not has_data:
+        st.error("Time series plot requires temperature or salinity data")
         return None
     
     try:
-        fig_ts = make_subplots(
-            rows=1, cols=2, 
-            subplot_titles=("Temperature vs Cycle", "Salinity vs Cycle"),
-            horizontal_spacing=0.1
-        )
+        # Convert time column to datetime if it exists
+        if 'time' in df.columns:
+            df = df.copy()
+            df['time'] = pd.to_datetime(df['time'], errors='coerce')
+            df = df.dropna(subset=['time'])
+            
+            # Sort by time
+            df = df.sort_values('time')
+            
+            # Aggregate by month for clearer trends (especially for multi-year data)
+            df['year_month'] = df['time'].dt.to_period('M')
+            
+            # Group by month and calculate mean values
+            monthly_data = df.groupby('year_month').agg({
+                'temperature': 'mean',
+                'salinity': 'mean'
+            }).reset_index()
+            
+            # Convert period back to timestamp for plotting
+            monthly_data['time'] = monthly_data['year_month'].dt.to_timestamp()
+            
+            x_col = 'time'
+            x_title = "Time (Monthly Averages)"
+            plot_data = monthly_data
+            
+        else:
+            # Use cycle as fallback
+            x_col = 'cycle'
+            x_title = "Cycle #"
+            plot_data = df.sort_values('cycle')
+        
+        # Create subplots only if we have both temperature and salinity
+        has_temp = 'temperature' in plot_data.columns
+        has_sal = 'salinity' in plot_data.columns
+        
+        if has_temp and has_sal:
+            fig_ts = make_subplots(
+                rows=1, cols=2, 
+                subplot_titles=("Temperature vs " + x_title, "Salinity vs " + x_title),
+                horizontal_spacing=0.1
+            )
 
-        # Temperature time series
-        fig_ts.add_trace(
-            go.Scatter(
-                x=df["cycle"], 
-                y=df["temperature"],
-                mode="lines+markers", 
-                name="Temperature",
-                line=dict(color="red", width=2),
-                marker=dict(size=6)
-            ), 
-            row=1, col=1
-        )
+            # Temperature time series
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=plot_data[x_col], 
+                    y=plot_data["temperature"],
+                    mode="lines+markers", 
+                    name="Temperature",
+                    line=dict(color="red", width=2),
+                    marker=dict(size=4)
+                ), 
+                row=1, col=1
+            )
 
-        # Salinity time series
-        fig_ts.add_trace(
-            go.Scatter(
-                x=df["cycle"], 
-                y=df["salinity"],
-                mode="lines+markers", 
-                name="Salinity",
-                line=dict(color="blue", width=2),
-                marker=dict(size=6)
-            ), 
-            row=1, col=2
-        )
+            # Salinity time series
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=plot_data[x_col], 
+                    y=plot_data["salinity"],
+                    mode="lines+markers", 
+                    name="Salinity",
+                    line=dict(color="blue", width=2),
+                    marker=dict(size=4)
+                ), 
+                row=1, col=2
+            )
 
-        # Update layout
-        fig_ts.update_xaxes(title="Cycle #")
-        fig_ts.update_yaxes(title="Temperature (°C)", row=1, col=1)
-        fig_ts.update_yaxes(title="Salinity (PSU)", row=1, col=2)
-        fig_ts.update_layout(
-            height=500,
-            title="Time Series Analysis",
-            showlegend=False
-        )
+            fig_ts.update_xaxes(title=x_title)
+            fig_ts.update_yaxes(title="Temperature (°C)", row=1, col=1)
+            fig_ts.update_yaxes(title="Salinity (PSU)", row=1, col=2)
+            fig_ts.update_layout(
+                height=500,
+                title="Time Series Analysis",
+                showlegend=False
+            )
+        else:
+            # Single plot for either temperature or salinity
+            y_col = 'temperature' if has_temp else 'salinity'
+            y_title = "Temperature (°C)" if has_temp else "Salinity (PSU)"
+            color = "red" if has_temp else "blue"
+            
+            fig_ts = go.Figure()
+            fig_ts.add_trace(
+                go.Scatter(
+                    x=plot_data[x_col],
+                    y=plot_data[y_col],
+                    mode="lines+markers",
+                    name=y_col.title(),
+                    line=dict(color=color, width=2),
+                    marker=dict(size=4)
+                )
+            )
+            
+            fig_ts.update_layout(
+                title=f"{y_col.title()} vs {x_title}",
+                xaxis_title=x_title,
+                yaxis_title=y_title,
+                height=500
+            )
         
         return fig_ts
         
     except Exception as e:
         st.error(f"Error creating time series plot: {str(e)}")
         return None
-
 # ----------------------------
 # Query Classification
 # ----------------------------

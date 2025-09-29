@@ -13,7 +13,7 @@ class DataManager:
     Uses real database data instead of generating random samples.
     """
     
-    def __init__(self, db_path: str = "./DB_files/data.duckdb", table_name: str = "ocean_profiles", default_limit: int = 1000):
+    def __init__(self, db_path: str = "./DB_files/data.duckdb", table_name: str = "ocean_profiles", default_limit: int = 1000000):
         """
         Initialize DataManager with real data from database.
         
@@ -244,7 +244,7 @@ class DataManager:
                 if len(standardized_data) > 1000:
                     
                     standardized_data = standardized_data.head(1000)
-                    logger.info(f"Limited RAG data to 1000 rows for performance")
+                    logger.info(f"Limited RAG data to 1000000 rows for performance")
                 
                 self.current_data = standardized_data
                 self.data_source = "rag"
