@@ -211,6 +211,10 @@ sql_query_pairs = [
     {
         "natural_language": "Find profiles with consistent temperature throughout depth",
         "sql_query": "SELECT n_prof, STDDEV_SAMP(temp) as temp_variation FROM ocean_profiles GROUP BY n_prof HAVING STDDEV_SAMP(temp) < 1"
+    },
+    {
+        "natural_language": "Show all columns for all ocean profiles",
+        "sql_query": "SELECT * FROM ocean_profiles"
     }
 ]
 
