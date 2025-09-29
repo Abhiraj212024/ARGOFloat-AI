@@ -243,7 +243,7 @@ class DataManager:
                 # Limit data size for performance
                 if len(standardized_data) > 1000:
                     
-                    standardized_data = standardized_data.head(1000)
+                    standardized_data = standardized_data.head(1000000)
                     logger.info(f"Limited RAG data to 1000000 rows for performance")
                 
                 self.current_data = standardized_data
