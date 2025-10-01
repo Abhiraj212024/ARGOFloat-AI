@@ -4,6 +4,7 @@ import os
 os.environ['LANGCHAIN_TRACING_V2'] = 'true'
 os.environ['LANGCHAIN_ENDPOINT'] = 'https://api.smith.langchain.com'
 LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
+CHROMA_DIR = "./sql_query_vectors"
 
 import duckdb
 import pandas as pd
@@ -13,12 +14,16 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 import json
 import chromadb
+from chromadb.config import Settings
 from typing import Dict, Any, Optional
 import logging
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+#Vector DB Client
+client = chromadb.PersistentClient(path=CHROMA_DIR, settings=Settings(allow_reset=True))
 
 class RAGPipeline:
     """
@@ -120,37 +125,43 @@ class RAGPipeline:
 
         #get list of actually existing collections
         existing = [c.name for c in client.list_collections()]
-        for col_name in collection_names:
-            if col_name not in existing:
-                print(f"⚠️ Skipping missing collection: {col_name}")
-                continue
+        try:
+            for col_name in collection_names:
+                if col_name not in existing:
+                    print(f"⚠️ Skipping missing collection: {col_name}")
+                    continue
 
-            collection = client.get_collection(col_name)
+                collection = client.get_collection(col_name)
 
-            results = collection.query(
-                query_texts=[user_query],
-                n_results=top_k,
-                include=["metadatas", "documents", "distances"]
-            )
+                results = collection.query(
+                    query_texts=[user_query],
+                    n_results=top_k,
+                    include=["metadatas", "documents", "distances"]
+                )
 
-            documents = results["documents"][0]
-            metadatas = results["metadatas"][0]
-            distances = results["distances"][0]
+                documents = results["documents"][0]
+                metadatas = results["metadatas"][0]
+                distances = results["distances"][0]
 
-            for doc, meta, dist in zip(documents, metadatas, distances):
-                if dist <= threshold:
-                    matches.append({
-                        "collection": col_name,
-                        "nl_query": doc,
-                        "sql_query": meta.get("sql") or meta.get("sql_query"),
-                        "distance": dist
-                    })
-        
-        if matches:
-            context = "\n".join([f"Natural Language: {r['nl_query']} -> SQL: {r['sql_query']} (distance={r['distance']:.4f})" for r in matches])
-            return context
-        else:
-            return " "
+                for doc, meta, dist in zip(documents, metadatas, distances):
+                    if dist <= threshold:
+                        matches.append({
+                            "collection": col_name,
+                            "nl_query": doc,
+                            "sql_query": meta.get("sql") or meta.get("sql_query"),
+                            "distance": dist
+                        })
+            
+            if matches:
+                context = "\n".join([f"Natural Language: {r['nl_query']} -> SQL: {r['sql_query']} (distance={r['distance']:.4f})" for r in matches])
+                logger.info(f"Fetched the following queries\n{context}")
+                return context
+            else:
+                logger.info("No similar queries found")
+                return "none"
+        except:
+            logger.error("Failed to fetch context")
+            return ""
     
     def generate_sql(self, user_query: str) -> str:
         """
@@ -164,6 +175,12 @@ class RAGPipeline:
         """
         if not self.llm:
             raise Exception("LLM not initialized")
+        
+        collection_names = ["duckdb_sql_queries"]
+        
+        context = self.query_similarity_search(client=client, collection_names=collection_names, user_query=user_query)
+
+        context_to_be_added = ("" if context == "none" else f"Here are some similar examples:\n{context}\n\n")
         
         system_prompt = f"""
         You are an expert DuckDB SQL assistant specializing in oceanographic data analysis.
@@ -180,6 +197,8 @@ class RAGPipeline:
         - Use appropriate WHERE clauses to filter data based on the question.
         - Use aggregation functions (AVG, COUNT, MAX, MIN, SUM) when appropriate.
         - For date/time queries, assume date columns are in standard formats.
+
+        {context_to_be_added}
         """
         
         try:

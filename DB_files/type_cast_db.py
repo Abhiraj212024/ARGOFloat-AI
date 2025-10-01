@@ -2,11 +2,8 @@ import duckdb
 
 conn = duckdb.connect("./DB_files/data.duckdb")
 
-result = conn.execute("PRAGMA table_info(ocean_profiles)").fetchall()
-print("\nColumn types using PRAGMA table_info():")
-for row in result:
-    print(f"{row[1]}: {row[2]}")
-
+result = conn.execute("SELECT ROUND(latitude/10)*10 AS lat_band, AVG(temp) FROM ocean_profiles GROUP BY lat_band").fetchdf()
+print(result.head())
 # # First, drop the original time column
 # conn.execute("ALTER TABLE ocean_profiles DROP COLUMN time")
 
