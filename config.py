@@ -13,6 +13,7 @@ DB_CONFIG = {
     "connection_timeout": 30
 }
 
+
 # LLM Configuration
 LLM_CONFIG = {
     "model_name": "llama3:8b-instruct-q4_K_M",
