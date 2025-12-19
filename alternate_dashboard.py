@@ -6,6 +6,9 @@ import plotly.express as px
 import sys
 import os
 import uuid
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # Add the current directory to Python path to import modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -334,7 +337,7 @@ def load_rag_pipeline():
     
     try:
         with st.spinner("Initializing RAG pipeline..."):
-            rag = create_rag_pipeline(db_path="./DB_files/data.duckdb", table_name="ocean_profiles")
+            rag = create_rag_pipeline(str(BASE_DIR / "DB_files" / "data.duckdb"), table_name="ocean_profiles")
             if rag.test_connection():
                 return rag
             else:

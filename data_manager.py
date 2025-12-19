@@ -4,6 +4,9 @@ import logging
 from typing import Dict, List, Optional, Union
 from datetime import datetime, timedelta
 import duckdb
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +25,7 @@ class DataManager:
             table_name: Name of the table containing ocean data
             default_limit: Number of default data points to load
         """
-        self.db_path = db_path
+        self.db_path = self.db_path = str((Path(__file__).resolve().parent / "DB_files" / "data.duckdb"))
         self.table_name = table_name
         self.default_limit = default_limit
         self.current_data = None
