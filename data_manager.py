@@ -25,7 +25,7 @@ class DataManager:
             table_name: Name of the table containing ocean data
             default_limit: Number of default data points to load
         """
-        self.db_path = self.db_path = str((Path(__file__).resolve().parent / "DB_files" / "data.duckdb"))
+        self.db_path = str((BASE_DIR / "DB_files" / "data.duckdb"))
         self.table_name = table_name
         self.default_limit = default_limit
         self.current_data = None
@@ -58,7 +58,13 @@ class DataManager:
     def _load_default_data(self):
         """Load first N data points from the actual database."""
         try:
-            con = duckdb.connect(self.db_path)
+            
+            from db import get_db_connection
+            con = get_db_connection()
+
+            # First check total records
+            total_count = con.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()[0]
+            logger.info(f"Total records in database: {total_count}")
             
             # Load first N records with all columns
             query = f"""
@@ -72,11 +78,16 @@ class DataManager:
                 longitude,
                 time
             FROM {self.table_name} 
-            ORDER BY n_prof, pres  -- Order by profile and pressure/depth
+            WHERE temp IS NOT NULL 
+                AND psal IS NOT NULL 
+                AND latitude IS NOT NULL 
+                AND longitude IS NOT NULL
+            ORDER BY n_prof, pres
             LIMIT {self.default_limit};
             """
             
             raw_data = con.execute(query).fetchdf()
+            logger.info(f"Query returned {len(raw_data)} rows")
             con.close()
             
             if raw_data.empty:

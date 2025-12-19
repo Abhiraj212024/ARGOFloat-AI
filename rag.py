@@ -60,7 +60,9 @@ class RAGPipeline:
         self.COLLECTION_NAME = collection_name
 
         # Persistent DB connection (READ ONLY)
-        self.con = duckdb.connect(self.DB_PATH, read_only=True)
+        from db import get_db_connection
+        self.con = get_db_connection()
+
 
         # Models
         self.sql_llm = OllamaLLM(model="llama3:8b-instruct-q4_K_M")
